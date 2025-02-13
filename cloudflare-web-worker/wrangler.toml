@@ -10,3 +10,6 @@ compatibility_date = "2023-07-16"
 [[r2_buckets]]
 binding = 'DISCORD_CDN_PROXY_BUCKET'
 bucket_name = 'discord-cdn-proxy-cache'
+
+[observability.logs]
+enabled = true
