@@ -1,4 +1,4 @@
-interface Env { DISCORD_TOKEN: string, CHANNELS?: [string], DISCORD_CDN_PROXY_BUCKET?: any }
+interface Env { DISCORD_TOKEN: string, CHANNELS?: [string], DISCORD_CDN_PROXY_BUCKET?: any, SECRET_PATH? : string }
 
 interface RefreshedResponse { refreshed_urls?: [{ original?: string, refreshed?: string }] }
 
@@ -66,6 +66,14 @@ export default {
 			if (!env.DISCORD_TOKEN)
 				return withCORS(request, Response.json(`DISCORD_TOKEN is not configured`, { status: 400 }));
 
+			const reqUrl = new URL(request.url)
+
+			if (env.SECRET_PATH) {
+				if (reqUrl.pathname != '/' + env.SECRET_PATH) {
+					return new Response("File not found", {status: 404})
+				}	
+			}
+
 			const decoded = decodeURIComponent(request.url);
 			const urlStart = decoded.indexOf('?');
 			const attachment_url = parseValidURL(decoded.substring(urlStart + 1));
@@ -89,14 +97,14 @@ export default {
 			const file_name = attachment_url.pathname.split('/').pop() ?? '';
 
 			// Check memory cache first
-			const cached_url = cache.get(file_name);
+			const cached_url = cache.get(attachment_url.toString());
 
 			if (cached_url && cached_url.expires.getTime() > Date.now())
 				return redirectResponse(request, cached_url.href, cached_url.expires, 'memory');
 
 			// Check r2 bucket (if configured)
 			if (env.DISCORD_CDN_PROXY_BUCKET) {
-				const object = await env.DISCORD_CDN_PROXY_BUCKET.get(file_name);
+				const object = await env.DISCORD_CDN_PROXY_BUCKET.get(attachment_url.toString());
 
 				if (object) {
 					const cached_url: CachedURL = await object.json();
@@ -135,11 +143,11 @@ export default {
 				const cached_url: CachedURL = { href: refreshed_url.href, expires };
 
 				// Save to memory cache
-				cache.set(file_name, cached_url);
+				cache.set(attachment_url.toString(), cached_url);
 
 				// Save to r2 bucket (if configured)
 				if (env.DISCORD_CDN_PROXY_BUCKET)
-					ctx.waitUntil(env.DISCORD_CDN_PROXY_BUCKET.put(file_name, JSON.stringify(cached_url),
+					ctx.waitUntil(env.DISCORD_CDN_PROXY_BUCKET.put(attachment_url.toString(), JSON.stringify(cached_url),
 						{
 							httpMetadata: {
 								expires: expires
